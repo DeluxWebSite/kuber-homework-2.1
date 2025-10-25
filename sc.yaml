@@ -1,0 +1,72 @@
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv1
+spec:
+  capacity:
+    storage: 1Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ''
+  hostPath:
+    path: '/mnt/data'
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: storage
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-vol
+spec:
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: storage
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: volumes-test
+spec:
+  selector:
+    matchLabels:
+      app: volumes1
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: volumes1
+    spec:
+      containers:
+        - name: busybox
+          image: busybox:1.28
+          command:
+            [
+              'sh',
+              '-c',
+              'mkdir -p /testvolume && while true; do echo "$(date) - Test message" >> /testvolume/success.txt; sleep 5; done',
+            ]
+          volumeMounts:
+            - name: volume
+              mountPath: /testvolume
+        - name: multitool
+          image: wbitt/network-multitool
+          command: ['sh', '-c', 'tail -f /testvolume/success.txt']
+          volumeMounts:
+            - name: volume
+              mountPath: /testvolume
+      volumes:
+        - name: volume
+          persistentVolumeClaim:
+            claimName: pvc-vol
